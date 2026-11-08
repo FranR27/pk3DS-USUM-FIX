@@ -34,6 +34,10 @@ Here is a look at what you can do across the program:
 - **Competitive trainers**: level-aware EV spreads, damage- and coverage-based move choices, and team synergy, with tunable weights.
 - **Learnsets**: every learnset mode is honoured, and a learnset's first move never duplicates another slot.
 - **TMs**: optionally expand the TM list, and give trainers TM moves.
+- **Field item randomization**: randomize or shuffle items found in the overworld, with safer record bounds and 32-bit item IDs.
+- **Shop randomization**: randomize secondary shops while preserving the main Poké Mart inventory.
+- **Ultra Sun / Ultra Moon detection**: identify the game from SMDH metadata when folder names and file counts are ambiguous.
+- **Ultra Moon wild encounters**: use the correct encounter GARC (`a/0/8/3`) so wild encounter randomization works with Ultra Moon, including the Expansion Mod.
 - Settings save and load with the rest of the randomizer options.
 
 ### Pokémon Uhuru Gift Support
@@ -60,7 +64,7 @@ pk3DS detects the Korean **Pokémon Uhuru Gift v16.0.3** expansion and adapts to
 
 ## Installation & Usage
 
-1. Download the latest release from the [Releases page](https://github.com/adhfult/pk3DS-but-mostly-for-USUM/releases) or the [Project Pokémon forum thread](https://projectpokemon.org/home/forums/topic/34377-pk3ds-pok%C3%A9mon-3ds-rom-editor-and-randomizer/).
+1. Download a build from this fork's [Releases](https://github.com/FranR27/pk3DS-USUM-FIX/releases) or the [GitHub Actions artifacts](https://github.com/FranR27/pk3DS-USUM-FIX/actions). For the upstream project, see [adhfult's releases](https://github.com/adhfult/pk3DS-but-mostly-for-USUM/releases).
 2. Extract the folder onto your computer.
 3. Dump your decrypted Pokémon Ultra Sun or Ultra Moon ROM (RomFS and ExeFS).
 4. Run `pk3DS.WinForms.exe` and select **File → Open** to choose your game directory.
@@ -77,8 +81,8 @@ pk3DS detects the Korean **Pokémon Uhuru Gift v16.0.3** expansion and adapts to
 ### Build Steps
 
 ```bash
-git clone https://github.com/adhfult/pk3DS-but-mostly-for-USUM.git
-cd pk3DS-but-mostly-for-USUM
+git clone https://github.com/FranR27/pk3DS-USUM-FIX.git
+cd pk3DS-USUM-FIX
 dotnet build pk3DS.sln --configuration Release
 ```
 
@@ -90,7 +94,8 @@ The output will be located in `pk3DS.WinForms/bin/Release/net8.0-windows/`.
 
 If you run into any bugs or have feedback, feel free to open an issue or reach out through the community threads:
 
-- **Kaphotics** — For creating pk3DS and providing the foundation for 3DS Pokémon hacking.
+- **adhfult** — Creator and maintainer of [pk3DS (But Extremely Catered Towards USUM)](https://github.com/adhfult/pk3DS-but-mostly-for-USUM). This repository is based on their work; credit and thanks for the USUM-focused fork and its features.
+- **Kaphotics** — For creating the original pk3DS and providing the foundation for 3DS Pokémon hacking.
 - **ABZB** — For extensive ARM assembly reverse engineering, CRO research, and function table documentation.
 - **Stracker** — For the [OWSE Overworld Script Editor](https://github.com/Strackeror/pk3DS/releases/tag/stracker-1.0).
 - **Smogon & Pokémon Showdown!** — For team formatting standards, sprite assets, etc.
