@@ -200,11 +200,18 @@ public class MartRandomizer
         for (int entry = 0; entry < entries.Length; entry++)
         {
             int count = entries[entry];
-            for (int i = 0; i < count; i++)
+
+            // Entries 0-7 are the main Poké Mart inventory repeated across trial stages.
+            // Keep the main shop unchanged; only restock the 20 secondary shops.
+            if (entry >= TrialStages)
             {
-                int item = RandomItemId(maxItemID);
-                Array.Copy(BitConverter.GetBytes((ushort)item), 0, data, currentOfs + (2 * i), 2);
+                for (int i = 0; i < count; i++)
+                {
+                    int item = RandomItemId(maxItemID);
+                    Array.Copy(BitConverter.GetBytes((ushort)item), 0, data, currentOfs + (2 * i), 2);
+                }
             }
+
             currentOfs += 2 * count;
         }
 
@@ -263,7 +270,6 @@ public class MartRandomizer
             return idx > 0 ? idx : 1;
         }
 
-        string[] mainShopItems = Competitive.CompetitiveDatabase.MainShopItems;
         string[] tmPool = BuildTMPool(itemNames);
         string[] mintPool = BuildMintPool(itemNames);
         int tmCursor = 0;
@@ -272,7 +278,7 @@ public class MartRandomizer
         for (int i = 0; i < regular.Length; i++)
         {
             string where = i < locations.Length ? locations[i] : "";
-            var cat = Present(ResolveRegularCategory(i, mainShopItems, tmPool, mintPool, RandomizeAllShops, out bool flat));
+            var cat = Present(ResolveRegularCategory(i, tmPool, mintPool, RandomizeAllShops, out bool flat));
             int have = layout.ShopCounts[i];
 
             // Each TM shop draws its own slice of the shuffled pool, so two of them never stock
@@ -349,10 +355,10 @@ public class MartRandomizer
         return (after.ShopCounts, after.BPCounts);
     }
 
-    private static string[] ResolveRegularCategory(int entry, string[] mainShopItems, string[] tmPool, string[] mintPool, bool randomizeAllShops, out bool flatRandom)
+    private static string[] ResolveRegularCategory(int entry, string[] tmPool, string[] mintPool, bool randomizeAllShops, out bool flatRandom)
     {
         flatRandom = false;
-        if (entry <= 7) return mainShopItems; // same mart, expanding across trial stages
+        if (entry < TrialStages) return null; // preserve the main Poké Mart across all trial stages
         string locationName = entry < locations.Length ? locations[entry] : "";
 
         // Fixed-purpose shops keep their purpose.
