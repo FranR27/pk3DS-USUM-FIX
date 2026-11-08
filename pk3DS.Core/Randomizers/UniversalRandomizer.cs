@@ -1929,7 +1929,7 @@ public class UniversalRandomizer
             var zFilter = new ZCrystalFilter(itemNames);
 
             // Collect all existing field items if in shuffle mode
-            var collectedItems = new List<ushort>();
+            var collectedItems = new List<uint>();
             int worldCount = ed.FileCount / 11;
 
             if (Settings.FieldItemsMode == 1) // Shuffle
@@ -1949,14 +1949,12 @@ public class UniversalRandomizer
                     {
                         if (itemData == null || itemData.Length < 4) continue;
                         int count = BitConverter.ToInt32(itemData, 0);
-                        for (int i = 0; i < count; i++)
+                        int recordCount = count > 0 ? Math.Min(count, (itemData.Length - 4) / 64) : 0;
+                        for (int i = 0; i < recordCount; i++)
                         {
                             int dataId = 4 + i * 64 + 48;
-                            if (dataId + 2 <= itemData.Length)
-                            {
-                                ushort it = BitConverter.ToUInt16(itemData, dataId);
-                                if (it > 0) collectedItems.Add(it);
-                            }
+                            uint it = BitConverter.ToUInt32(itemData, dataId);
+                            if (it > 0) collectedItems.Add(it);
                         }
                     }
                 }
@@ -1980,28 +1978,26 @@ public class UniversalRandomizer
                 {
                     if (itemData == null || itemData.Length < 4) continue;
                     int count = BitConverter.ToInt32(itemData, 0);
-                    for (int i = 0; i < count; i++)
+                    int recordCount = count > 0 ? Math.Min(count, (itemData.Length - 4) / 64) : 0;
+                    for (int i = 0; i < recordCount; i++)
                     {
                         int dataId = 4 + i * 64 + 48;
-                        if (dataId + 2 <= itemData.Length)
+                        uint currentItem = BitConverter.ToUInt32(itemData, dataId);
+                        if (currentItem == 0) continue;
+
+                        uint newItem = currentItem;
+                        if (Settings.FieldItemsMode == 1) // Shuffle
                         {
-                            ushort currentItem = BitConverter.ToUInt16(itemData, dataId);
-                            if (currentItem == 0) continue;
-
-                            ushort newItem = currentItem;
-                            if (Settings.FieldItemsMode == 1) // Shuffle
-                            {
-                                if (shuffleIdx < collectedItems.Count)
-                                    newItem = collectedItems[shuffleIdx++];
-                            }
-                            else // Random
-                            {
-                                newItem = (ushort)GetRandomFieldItem(maxItem, zFilter, itemNames);
-                            }
-
-                            BitConverter.GetBytes(newItem).CopyTo(itemData, dataId);
-                            modified = true;
+                            if (shuffleIdx < collectedItems.Count)
+                                newItem = collectedItems[shuffleIdx++];
                         }
+                        else // Random
+                        {
+                            newItem = (uint)GetRandomFieldItem(maxItem, zFilter, itemNames);
+                        }
+
+                        BitConverter.GetBytes(newItem).CopyTo(itemData, dataId);
+                        modified = true;
                     }
                 }
 
