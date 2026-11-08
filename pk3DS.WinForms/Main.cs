@@ -1037,6 +1037,28 @@ namespace pk3DS.WinForms;
         }
     }
 
+    private static string DetectUltraVersionFromSMDH()
+    {
+        if (SMDH?.AppInfo == null)
+            return null;
+
+        foreach (var info in SMDH.AppInfo)
+        {
+            if (info == null)
+                continue;
+
+            string description = (info.ShortDescription ?? "") + " " + (info.LongDescription ?? "");
+            if (description.Contains("Ultra Moon", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("UltraMoon", StringComparison.OrdinalIgnoreCase))
+                return "UM";
+            if (description.Contains("Ultra Sun", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("UltraSun", StringComparison.OrdinalIgnoreCase))
+                return "US";
+        }
+
+        return null;
+    }
+
     private static string DetectUltraVersion()
     {
         string raw = RomFSPath ?? "";
@@ -1065,7 +1087,9 @@ namespace pk3DS.WinForms;
             if (Config.Version == pk3DS.Core.GameVersion.UM) return "UM";
             if (Config.Version == pk3DS.Core.GameVersion.US) return "US";
             if (Config.UltraMoon) return "UM";
-            if (Config.UltraSun) return "US";
+            // Do not treat generic GameVersion.USUM as Ultra Sun: its file count is shared
+            // by both games and UltraSun is only the fallback when UltraMoon is false.
+            if (Config.Version != pk3DS.Core.GameVersion.USUM && Config.UltraSun) return "US";
         }
         return null;
     }
@@ -1660,6 +1684,37 @@ namespace pk3DS.WinForms;
         {
             try { SMDH = new SMDH(Path.Combine(ExeFSPath, "icon.bin")); } catch { SMDH = null; }
             HANSgameID = SMDH?.AppSettings?.StreetPassID ?? 0;
+        }
+
+        // Resolve the ambiguous USUM file-count detection using the game's own SMDH metadata.
+        // RomFS-only folders may not contain "UM"/"Ultra Moon" in their path, so path detection
+        // alone incorrectly defaults those dumps to Ultra Sun.
+        if (Config?.Version == pk3DS.Core.GameVersion.USUM)
+        {
+            string detectedUltra = DetectUltraVersionFromSMDH();
+            if (detectedUltra == null)
+                detectedUltra = DetectUltraVersion();
+
+            if (detectedUltra == "UM")
+                Config = new GameConfig(pk3DS.Core.GameVersion.UM);
+            else if (detectedUltra == "US")
+                Config = new GameConfig(pk3DS.Core.GameVersion.US);
+            else
+            {
+                var choice = WinFormsUtil.Prompt(MessageBoxButtons.YesNoCancel,
+                    "The folder structure does not identify whether this is Ultra Sun or Ultra Moon.\n\n" +
+                    "YES = Ultra Sun\nNO = Ultra Moon\nCANCEL = Do not load this game",
+                    "Select Ultra version");
+                if (choice == DialogResult.Cancel)
+                {
+                    RomFSPath = null;
+                    Config = null;
+                    return;
+                }
+                Config = new GameConfig(choice == DialogResult.No
+                    ? pk3DS.Core.GameVersion.UM
+                    : pk3DS.Core.GameVersion.US);
+            }
         }
 
         if (count > 3)
