@@ -211,7 +211,7 @@ public sealed class GARCReference
     [
         .. GARCReference_USUM,
         .. new[] {
-            new GARCReference(082, "encdata"),
+            new GARCReference(083, "encdata"),
             new GARCReference(082, "owmodels"),
         },
     ];
