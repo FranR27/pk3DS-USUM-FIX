@@ -1,0 +1,37 @@
+name: Build pk3DS
+
+on:
+  push:
+    branches:
+      - fix/field-items-and-secondary-shops
+  pull_request:
+    branches:
+      - fix/field-items-and-secondary-shops
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore pk3DS.sln
+
+      - name: Build solution
+        run: dotnet build pk3DS.sln --configuration Release --no-restore
+
+      - name: Upload build output
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pk3DS-build
+          path: '**/bin/Release/**'
+          if-no-files-found: warn
