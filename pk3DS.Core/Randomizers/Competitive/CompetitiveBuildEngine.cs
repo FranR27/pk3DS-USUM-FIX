@@ -120,7 +120,7 @@ public class CompetitiveBuildEngine
         int phys = 0, spec = 0;
         foreach (int m in moves)
         {
-            if (m <= 0 || m >= data.Length) continue;
+            if (m <= 0 || m >= data.Length || data[m] == null) continue;
             if (data[m].Category == 1) phys++;
             else if (data[m].Category == 2) spec++;
         }
@@ -298,7 +298,7 @@ public class CompetitiveBuildEngine
         {
             foreach (int m in moves)
             {
-                if (m <= 0 || m >= moveData.Length) continue;
+                if (m <= 0 || m >= moveData.Length || moveData[m] == null) continue;
                 switch (moveData[m].Category)
                 {
                     case 0: statusCount++; break;
