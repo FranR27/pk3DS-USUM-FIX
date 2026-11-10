@@ -2473,13 +2473,13 @@ public class UniversalRandomizer
         // The pool the TM slots are drawn from. Expansion's new slots draw from the same pool.
         // Keep this validation in the method scope because both randomized and unchanged
         // TM modes can expand the table and therefore need the same loaded move-data ceiling.
-        var moveNames = Config.GetText(TextName.MoveNames);
-        int maxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
+        var tmMoveNames = Config.GetText(TextName.MoveNames);
+        int tmMaxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
         bool IsValidLoadedMove(int id) =>
-            id > 0 && id <= maxMoveID &&
+            id > 0 && id <= tmMaxMoveID &&
             Config.Moves[id] != null &&
             Config.Moves[id].PP != 1 &&
-            Legal.IsUsableMove(id, moveNames);
+            Legal.IsUsableMove(id, tmMoveNames);
 
         List<int> pool;
         if (Settings.TMHMMovesMode > 0)
