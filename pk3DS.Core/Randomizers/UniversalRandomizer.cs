@@ -2475,13 +2475,20 @@ public class UniversalRandomizer
         if (Settings.TMHMMovesMode > 0)
         {
             var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
+            // Expansion text tables can advertise move IDs absent from the loaded move GARC.
+            // Keep MTs and trainer TM compatibility inside the actual move-data range.
+            int maxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
+            bool IsValidLoadedMove(int id) =>
+                id > 0 && id <= maxMoveID &&
+                Config.Moves[id] != null &&
+                Config.Moves[id].PP != 1 &&
+                Legal.IsUsableMove(id, moveNames);
 
             List<int> validMoves;
             if (Settings.CompetitiveRandomizer)
             {
                 validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) &&
+                    .Where(m => IsValidLoadedMove(m) &&
                                 (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(moveNames[m]) ||
                                  Competitive.CompetitiveDatabase.SituationalMoves.Contains(moveNames[m])))
                     .Distinct()
@@ -2490,7 +2497,7 @@ public class UniversalRandomizer
             else
             {
                 validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames))
+                    .Where(m => IsValidLoadedMove(m))
                     .Distinct()
                     .ToList();
 
@@ -2504,7 +2511,7 @@ public class UniversalRandomizer
             if (validMoves.Count < t.Count)
             {
                 var fallbackMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) && !validMoves.Contains(m))
+                    .Where(m => IsValidLoadedMove(m) && !validMoves.Contains(m))
                     .Distinct()
                     .ToList();
                 Util.Shuffle(fallbackMoves);
@@ -2531,7 +2538,7 @@ public class UniversalRandomizer
             var moveNames = Config.GetText(TextName.MoveNames);
             int maxMoveID = Config.Info.MaxMoveID;
             pool = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                .Where(m => Legal.IsUsableMove(m, moveNames))
+                .Where(m => IsValidLoadedMove(m))
                 .Distinct()
                 .ToList();
         }
