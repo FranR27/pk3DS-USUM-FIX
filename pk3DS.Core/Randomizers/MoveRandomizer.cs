@@ -19,35 +19,54 @@ public class MoveRandomizer : IRandomizer
 
     public MoveRandomizer(GameConfig config)
     {
-        var MaxMoveID = config?.Info?.MaxMoveID ?? 720;
+        var configuredMaxMoveID = config?.Info?.MaxMoveID ?? 720;
         MoveData = config?.Moves ?? [];
         SpeciesStat = config?.Personal?.Table ?? [];
 
         string[] moveNames = Array.Empty<string>();
         try { moveNames = config?.GetText(TextName.MoveNames) ?? Array.Empty<string>(); } catch { }
-        for (int i = 1; i < moveNames.Length && i <= MaxMoveID; i++)
+
+        // The configured/text ceiling can be larger than the actual move GARC. Never
+        // put an ID in the random pool unless its Move7 record was loaded successfully.
+        int dataMaxMoveID = MoveData.Length - 1;
+        int usableMaxMoveID = Math.Min(configuredMaxMoveID, dataMaxMoveID);
+        var validMoves = new List<int>();
+
+        for (int i = 1; i <= usableMaxMoveID; i++)
         {
-            // Flag 1 PP special moves so they cannot be randomized onto movesets/trainers
-            if (MoveData != null && i < MoveData.Length && MoveData[i] != null && MoveData[i].PP == 1)
+            if (MoveData[i] == null)
+                continue;
+
+            // 1 PP moves are special/scripted and should not be assigned to ordinary sets.
+            if (MoveData[i].PP == 1)
+            {
                 DefaultBannedMoves.Add(i);
+                continue;
+            }
+
+            // Reject Z/Max/G-Max moves and blank/padding slots when names are available.
+            if (moveNames.Length > 0 && !Legal.IsUsableMove(i, moveNames))
+            {
+                DefaultBannedMoves.Add(i);
+                continue;
+            }
+
+            validMoves.Add(i);
         }
 
-        // Ban every id the usable-move rule rejects: Z, Max, G-Max, unnamed placeholders, ids past the names.
-        // With no names loaded, fall back to the Z-move list alone, as before.
-        for (int i = 1; i <= MaxMoveID; i++)
-        {
-            if (moveNames.Length > 0 && !Legal.IsUsableMove(i, moveNames))
-                DefaultBannedMoves.Add(i);
-        }
+        // Preserve the legacy Z-move exclusion when text could not be loaded.
         if (moveNames.Length == 0)
         {
             foreach (int zm in Legal.Z_Moves)
-            {
                 DefaultBannedMoves.Add(zm);
-            }
+            validMoves.RemoveAll(DefaultBannedMoves.Contains);
         }
 
-        RandMove = new GenericRandomizer(Enumerable.Range(1, MaxMoveID).Where(i => !DefaultBannedMoves.Contains(i)).ToArray());
+        if (validMoves.Count == 0)
+            throw new InvalidOperationException(
+                $"No usable moves with loaded move data were found (configured max: {configuredMaxMoveID}, data slots: {MoveData.Length}).");
+
+        RandMove = new GenericRandomizer(validMoves.ToArray());
     }
 
     public void Execute()

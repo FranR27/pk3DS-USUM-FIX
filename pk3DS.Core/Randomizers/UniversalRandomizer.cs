@@ -2471,26 +2471,33 @@ public class UniversalRandomizer
             return tmlist;
 
         // The pool the TM slots are drawn from. Expansion's new slots draw from the same pool.
+        // Keep this validation in the method scope because both randomized and unchanged
+        // TM modes can expand the table and therefore need the same loaded move-data ceiling.
+        var tmMoveNames = Config.GetText(TextName.MoveNames);
+        int tmMaxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
+        bool IsValidLoadedMove(int id) =>
+            id > 0 && id <= tmMaxMoveID &&
+            Config.Moves[id] != null &&
+            Config.Moves[id].PP != 1 &&
+            Legal.IsUsableMove(id, tmMoveNames);
+
         List<int> pool;
         if (Settings.TMHMMovesMode > 0)
         {
-            var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
-
             List<int> validMoves;
             if (Settings.CompetitiveRandomizer)
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) &&
-                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(moveNames[m]) ||
-                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(moveNames[m])))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m) &&
+                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(tmMoveNames[m]) ||
+                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(tmMoveNames[m])))
                     .Distinct()
                     .ToList();
             }
             else
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m))
                     .Distinct()
                     .ToList();
 
@@ -2503,8 +2510,8 @@ public class UniversalRandomizer
 
             if (validMoves.Count < t.Count)
             {
-                var fallbackMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) && !validMoves.Contains(m))
+                var fallbackMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m) && !validMoves.Contains(m))
                     .Distinct()
                     .ToList();
                 Util.Shuffle(fallbackMoves);
@@ -2528,10 +2535,8 @@ public class UniversalRandomizer
         {
             // Mode 0 is "Unchanged": the vanilla 100 stay put (shuffling them used to re-point every
             // species' TM compatibility bits at different moves); only the new slots are filled.
-            var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
-            pool = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                .Where(m => Legal.IsUsableMove(m, moveNames))
+            pool = Enumerable.Range(1, tmMaxMoveID)
+                .Where(m => IsValidLoadedMove(m))
                 .Distinct()
                 .ToList();
         }
