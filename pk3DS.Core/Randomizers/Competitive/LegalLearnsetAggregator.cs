@@ -13,6 +13,17 @@ public class LegalLearnsetAggregator
     private readonly Dictionary<int, HashSet<int>> LegalMovePools = new();
     private string[] CachedMoveNames;
 
+    // A move can have a valid name/ID in an Expansion Pack text table while its
+    // corresponding move record is absent from the loaded move GARC. Never put
+    // such an ID into a trainer's legal pool: later battle-set scoring reads Moves[id].
+    private bool IsValidMoveId(int id)
+    {
+        if (id <= 0 || Config?.Moves == null || id >= Config.Moves.Length || Config.Moves[id] == null)
+            return false;
+        if (Legal.Z_Moves.Contains(id)) return false;
+        return CachedMoveNames == null || CachedMoveNames.Length == 0 || Legal.IsUsableMove(id, CachedMoveNames);
+    }
+
     public LegalLearnsetAggregator(GameConfig config)
     {
         Config = config;
@@ -37,7 +48,7 @@ public class LegalLearnsetAggregator
                 {
                     foreach (int m in learnset.Moves)
                     {
-                        if (m > 0 && !Legal.Z_Moves.Contains(m)) moves.Add(m);
+                        if (IsValidMoveId(m)) moves.Add(m);
                     }
                 }
             }
@@ -81,7 +92,7 @@ public class LegalLearnsetAggregator
 
             for (int t = 0; t < pi.TMHM.Length && t < tmMoveIDs.Length; t++)
             {
-                if (pi.TMHM[t] && tmMoveIDs[t] > 0 && !Legal.Z_Moves.Contains(tmMoveIDs[t]))
+                if (pi.TMHM[t] && IsValidMoveId(tmMoveIDs[t]))
                     pool.Add(tmMoveIDs[t]);
             }
         }
@@ -107,7 +118,7 @@ public class LegalLearnsetAggregator
             if (pi is PersonalInfoSM sm)
             {
                 for (int t = 0; t < SpecialTutors7.Length && t < sm.TutorFlags.Length; t++)
-                    if (sm.TutorFlags[t]) pool.Add(SpecialTutors7[t]);
+                    if (sm.TutorFlags[t] && IsValidMoveId(SpecialTutors7[t])) pool.Add(SpecialTutors7[t]);
 
                 // The beach-tutor lists sit back to back from BeachTutorFirstBit, in list order.
                 int bit = BeachTutorFirstBit;
@@ -115,7 +126,7 @@ public class LegalLearnsetAggregator
                 {
                     foreach (ushort move in list ?? [])
                     {
-                        if (bit < sm.TutorFlags.Length && sm.TutorFlags[bit] && move > 0 && !Legal.Z_Moves.Contains(move))
+                        if (bit < sm.TutorFlags.Length && sm.TutorFlags[bit] && IsValidMoveId(move))
                             pool.Add(move);
                         bit++;
                     }
@@ -129,7 +140,7 @@ public class LegalLearnsetAggregator
                 var typeTutorMoves = tutorMoveLists[0];
                 for (int t = 0; t < pi.TypeTutors.Length && t < typeTutorMoves.Length; t++)
                 {
-                    if (pi.TypeTutors[t] && typeTutorMoves[t] > 0 && !Legal.Z_Moves.Contains(typeTutorMoves[t]))
+                    if (pi.TypeTutors[t] && IsValidMoveId(typeTutorMoves[t]))
                         pool.Add(typeTutorMoves[t]);
                 }
             }
@@ -145,7 +156,7 @@ public class LegalLearnsetAggregator
                     var flags = pi.SpecialTutors[s];
                     for (int t = 0; t < flags.Length && t < tutorMoves.Length; t++)
                     {
-                        if (flags[t] && tutorMoves[t] > 0 && !Legal.Z_Moves.Contains(tutorMoves[t]))
+                        if (flags[t] && IsValidMoveId(tutorMoves[t]))
                             pool.Add(tutorMoves[t]);
                     }
                 }
@@ -208,6 +219,7 @@ public class LegalLearnsetAggregator
             if (id <= 0 || id >= CachedMoveNames.Length || id >= moveData.Length) continue;
             string name = CachedMoveNames[id];
             if (string.IsNullOrEmpty(name) || !categoryNames.Contains(name)) continue;
+            if (moveData[id] == null) continue;
             int moveType = moveData[id].Type;
             if (Array.IndexOf(types, moveType) >= 0) count++;
         }
