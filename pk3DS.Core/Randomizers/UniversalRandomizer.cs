@@ -2471,19 +2471,19 @@ public class UniversalRandomizer
             return tmlist;
 
         // The pool the TM slots are drawn from. Expansion's new slots draw from the same pool.
+        // Keep this validation in the method scope because both randomized and unchanged
+        // TM modes can expand the table and therefore need the same loaded move-data ceiling.
+        var moveNames = Config.GetText(TextName.MoveNames);
+        int maxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
+        bool IsValidLoadedMove(int id) =>
+            id > 0 && id <= maxMoveID &&
+            Config.Moves[id] != null &&
+            Config.Moves[id].PP != 1 &&
+            Legal.IsUsableMove(id, moveNames);
+
         List<int> pool;
         if (Settings.TMHMMovesMode > 0)
         {
-            var moveNames = Config.GetText(TextName.MoveNames);
-            // Expansion text tables can advertise move IDs absent from the loaded move GARC.
-            // Keep MTs and trainer TM compatibility inside the actual move-data range.
-            int maxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
-            bool IsValidLoadedMove(int id) =>
-                id > 0 && id <= maxMoveID &&
-                Config.Moves[id] != null &&
-                Config.Moves[id].PP != 1 &&
-                Legal.IsUsableMove(id, moveNames);
-
             List<int> validMoves;
             if (Settings.CompetitiveRandomizer)
             {
