@@ -2487,16 +2487,16 @@ public class UniversalRandomizer
             List<int> validMoves;
             if (Settings.CompetitiveRandomizer)
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
                     .Where(m => IsValidLoadedMove(m) &&
-                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(moveNames[m]) ||
-                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(moveNames[m])))
+                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(tmMoveNames[m]) ||
+                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(tmMoveNames[m])))
                     .Distinct()
                     .ToList();
             }
             else
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
                     .Where(m => IsValidLoadedMove(m))
                     .Distinct()
                     .ToList();
@@ -2510,7 +2510,7 @@ public class UniversalRandomizer
 
             if (validMoves.Count < t.Count)
             {
-                var fallbackMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
+                var fallbackMoves = Enumerable.Range(1, tmMaxMoveID)
                     .Where(m => IsValidLoadedMove(m) && !validMoves.Contains(m))
                     .Distinct()
                     .ToList();
@@ -2535,9 +2535,7 @@ public class UniversalRandomizer
         {
             // Mode 0 is "Unchanged": the vanilla 100 stay put (shuffling them used to re-point every
             // species' TM compatibility bits at different moves); only the new slots are filled.
-            var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
-            pool = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
+            pool = Enumerable.Range(1, tmMaxMoveID)
                 .Where(m => IsValidLoadedMove(m))
                 .Distinct()
                 .ToList();
