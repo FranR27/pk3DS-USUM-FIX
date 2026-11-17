@@ -1567,6 +1567,14 @@ public class UniversalRandomizer
 
         int Reroll()
         {
+            if (Settings.CompetitiveRandomizer && Settings.TrainerTrySimilarStrength)
+            {
+                IEnumerable<int> candidates = isLegendarySlot && allowedLegendaries is { Count: > 0 }
+                    ? allowedLegendaries
+                    : speciesRand.AllowedSpecies;
+                return PickFinalEvolutionBySimilarBST(original, candidates, theme);
+            }
+
             if (isLegendarySlot && allowedLegendaries != null && allowedLegendaries.Count > 0)
             {
                 if (theme >= 0)
