@@ -171,8 +171,68 @@ public class MartRandomizer
 
     private ZCrystalFilter ZFilter = new(null);
 
+    // Items a shop may sell when it is stocked at random: price above zero (so key items such as the bike,
+    // the Rainbow Wing or passes never show up), not a Z-Crystal, not banned, and with a real name.
+    // null means the item table could not be read; RandomItemId then falls back to the old behaviour.
+    private int[] BuyablePool;
+
+    // Poké Ball, Great Ball, Ultra Ball / Repel, Super Repel, Max Repel, Escape Rope, Potion, Super Potion, Hyper Potion
+    private static readonly int[] BallStaples = [4, 3, 2];
+    private static readonly int[] MiscStaples = [79, 76, 77, 78, 17, 26, 25];
+
+    private static int[] StaplesFor(string where)
+    {
+        if (where.Contains("[Poké Balls]")) return BallStaples;
+        if (where.Contains("[Misc]")) return MiscStaples;
+        return [];
+    }
+
+    private void BuildBuyablePool(GameConfig config, int maxItemID)
+    {
+        BuyablePool = null;
+        try
+        {
+            var garc = config?.GetGARCData("item");
+            if (garc?.Files == null || garc.Files.Length < 2) return;
+
+            string[] names = config.GetText(TextName.ItemNames);
+            int max = garc.Files.Length - 1;
+            if (maxItemID > 0) max = Math.Min(max, maxItemID);
+            if (names is { Length: > 0 }) max = Math.Min(max, names.Length - 1);
+
+            var pool = new List<int>();
+            for (int id = 1; id <= max; id++)
+            {
+                if (BanBadItems && Array.IndexOf(BannedItems, id) >= 0) continue;
+                if (ZFilter.IsZCrystal(id)) continue;
+                if (Legal.Pouch_Key_SM.Contains((ushort)id)) continue;
+                if (names is { Length: > 0 })
+                {
+                    string nm = names[id]?.Trim();
+                    if (string.IsNullOrEmpty(nm) || nm is "???" or "-----") continue;
+                }
+
+                try
+                {
+                    var data = garc.Files[id];
+                    if (data == null || data.Length == 0) continue;
+                    if (new pk3DS.Core.Structures.Item(data).BuyPrice <= 0) continue;
+                }
+                catch { continue; }
+
+                pool.Add(id);
+            }
+
+            if (pool.Count >= 8) BuyablePool = [.. pool];
+        }
+        catch { BuyablePool = null; }
+    }
+
     private int RandomItemId(int maxItemID)
     {
+        if (BuyablePool is { Length: > 0 })
+            return BuyablePool[(int)(Util.Random32() % (uint)BuyablePool.Length)];
+
         int item;
         int guard = 0;
         do
@@ -183,9 +243,14 @@ public class MartRandomizer
         return item;
     }
 
-    public void Execute(int maxItemID)
+    public void Execute(int maxItemID, GameConfig config = null)
     {
         if (Mode == 0) return;
+        if (config != null)
+        {
+            ZFilter = new ZCrystalFilter(config.GetText(TextName.ItemNames));
+            BuildBuyablePool(config, maxItemID);
+        }
         string croPath = Path.Combine(RomFSPath, "Shop.cro");
         if (!File.Exists(croPath)) return;
         if (pk3DS.Core.Modding.UhuruGuard.RefusalFor(croPath) != null) return; // Uhuru: Shop.cro is not patched unchecked
@@ -246,6 +311,7 @@ public class MartRandomizer
 
         string[] itemNames = config != null ? config.GetText(TextName.ItemNames) : [];
         ZFilter = new ZCrystalFilter(itemNames);
+        BuildBuyablePool(config, maxItemID);
 
         string[] Present(string[] cat)
         {
@@ -300,14 +366,20 @@ public class MartRandomizer
                 if (wanted > 0) size = Math.Min(Math.Max(have, wanted), MaxExpandedSlots);
             }
 
+            // A shop that is stocked at random still keeps its basics: the Poké Ball shops sell Poké Balls
+            // and the misc. shops sell Repels, Escape Rope and Potions, then the rest is random.
+            int[] staples = flat ? StaplesFor(where) : [];
+
             var list = new int[size];
             for (int k = 0; k < size; k++)
             {
                 list[k] = where.Contains("[X Items]")
                     ? XItemIDs[k % XItemIDs.Length]
-                    : flat || cat.Length == 0
-                        ? RandomItemId(maxItemID)
-                        : GetItemByName(cat[k % cat.Length]);
+                    : k < staples.Length
+                        ? staples[k]
+                        : flat || cat.Length == 0
+                            ? RandomItemId(maxItemID)
+                            : GetItemByName(cat[k % cat.Length]);
             }
             regular[i] = list;
         }
@@ -513,7 +585,9 @@ public class MartRandomizer
             foreach (string nm in itemNames)
             {
                 if (string.IsNullOrEmpty(nm) || nm.Length < 3) continue;
-                if (nm.StartsWith("TM", StringComparison.OrdinalIgnoreCase) && char.IsDigit(nm[2]))
+                // "TM001" in English text, "MT001" in Spanish/French/Italian text.
+                if ((nm.StartsWith("TM", StringComparison.OrdinalIgnoreCase) || nm.StartsWith("MT", StringComparison.OrdinalIgnoreCase))
+                    && char.IsDigit(nm[2]) && !tmNames.Contains(nm))
                     tmNames.Add(nm);
             }
         }

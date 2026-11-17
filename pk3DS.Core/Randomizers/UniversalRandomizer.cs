@@ -1178,7 +1178,7 @@ public class UniversalRandomizer
                     progressCallback?.Invoke("WARNING: " + MartRandomizer.ExpansionSkipped, 95);
             }
             else
-                martRand.Execute(Config.Info.MaxItemID);
+                martRand.Execute(Config.Info.MaxItemID, Config);
         }
 
         // 9a1. Cheap Rare Candies
@@ -1928,8 +1928,14 @@ public class UniversalRandomizer
                 maxItem = Math.Min(maxItem, itemNames.Length - 1);
             var zFilter = new ZCrystalFilter(itemNames);
 
-            // Collect all existing field items if in shuffle mode
+            // The yellow Poké Balls that hold a TM must keep holding a TM. The TM ids are the vanilla TM
+            // pouch plus any item named like a TM (the expanded TMs are renamed to "TM101"... by
+            // ExpandedTMItems), so this works in any text language.
+            var tmIds = BuildFieldTMIds(itemNames, maxItem);
+
+            // Collect all existing field items if in shuffle mode (TMs and everything else shuffle separately)
             var collectedItems = new List<uint>();
+            var collectedTMs = new List<uint>();
             int worldCount = ed.FileCount / 11;
 
             if (Settings.FieldItemsMode == 1) // Shuffle
@@ -1954,14 +1960,18 @@ public class UniversalRandomizer
                         {
                             int dataId = 4 + i * 64 + 48;
                             uint it = BitConverter.ToUInt32(itemData, dataId);
-                            if (it > 0) collectedItems.Add(it);
+                            if (it == 0) continue;
+                            if (tmIds.Contains(it)) collectedTMs.Add(it);
+                            else collectedItems.Add(it);
                         }
                     }
                 }
                 collectedItems = collectedItems.OrderBy(_ => Util.Rand.Next()).ToList();
+                collectedTMs = collectedTMs.OrderBy(_ => Util.Rand.Next()).ToList();
             }
 
             int shuffleIdx = 0;
+            int shuffleTMIdx = 0;
             for (int w = 0; w < worldCount; w++)
             {
                 int index = w * 11;
@@ -1986,10 +1996,20 @@ public class UniversalRandomizer
                         if (currentItem == 0) continue;
 
                         uint newItem = currentItem;
+                        bool isTM = tmIds.Contains(currentItem);
                         if (Settings.FieldItemsMode == 1) // Shuffle
                         {
-                            if (shuffleIdx < collectedItems.Count)
+                            if (isTM)
+                            {
+                                if (shuffleTMIdx < collectedTMs.Count)
+                                    newItem = collectedTMs[shuffleTMIdx++];
+                            }
+                            else if (shuffleIdx < collectedItems.Count)
                                 newItem = collectedItems[shuffleIdx++];
+                        }
+                        else if (isTM) // Random: a TM ball stays a TM ball, only which TM changes
+                        {
+                            newItem = GetRandomFieldTM(tmIds);
                         }
                         else // Random
                         {
@@ -2014,6 +2034,32 @@ public class UniversalRandomizer
         {
             // A missing or malformed encdata GARC must not halt the overall process
         }
+    }
+
+    private static HashSet<uint> BuildFieldTMIds(string[] itemNames, int maxItem)
+    {
+        var ids = new HashSet<uint>();
+        foreach (ushort id in Legal.Pouch_TMHM_SM) ids.Add(id);
+
+        // Expanded TMs (TM101+) and any text language: "TM001", "MT001", ...
+        if (itemNames != null)
+        {
+            for (int i = 1; i < itemNames.Length && i <= maxItem; i++)
+            {
+                string nm = itemNames[i]?.Trim();
+                if (string.IsNullOrEmpty(nm) || nm.Length < 3) continue;
+                if ((nm.StartsWith("TM", StringComparison.OrdinalIgnoreCase) || nm.StartsWith("MT", StringComparison.OrdinalIgnoreCase))
+                    && char.IsDigit(nm[2]))
+                    ids.Add((uint)i);
+            }
+        }
+        return ids;
+    }
+
+    private static uint GetRandomFieldTM(HashSet<uint> tmIds)
+    {
+        var list = tmIds.ToArray();
+        return list[Util.Rand.Next(list.Length)];
     }
 
     private int GetRandomFieldItem(int maxItem, ZCrystalFilter zFilter, string[] itemNames)
