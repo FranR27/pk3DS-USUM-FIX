@@ -1931,8 +1931,6 @@ public class UniversalRandomizer
             // Preserve the original reward class: yellow TM balls may only exchange with other TMs.
             var collectedGeneralItems = new List<uint>();
             var collectedTMItems = new List<uint>();
-            string[] tmNames = (itemNames ?? []).Select((name, id) => (name, id))
-                .Where(x => IsTMItemName(x.name)).Select(x => x.name).ToArray();
             int[] tmPool = (itemNames ?? []).Select((name, id) => (name, id))
                 .Where(x => x.id > 0 && x.id <= maxItem && IsTMItemName(x.name))
                 .Select(x => x.id).ToArray();
@@ -1967,8 +1965,8 @@ public class UniversalRandomizer
                         }
                     }
                 }
-                Util.Shuffle(collectedGeneralItems);
-                Util.Shuffle(collectedTMItems);
+                collectedGeneralItems = collectedGeneralItems.OrderBy(_ => Util.Rand.Next()).ToList();
+                collectedTMItems = collectedTMItems.OrderBy(_ => Util.Rand.Next()).ToList();
             }
 
             int shuffleGeneralIdx = 0;
@@ -2073,7 +2071,7 @@ public class UniversalRandomizer
             Competitive.CompetitiveDatabase.EvoStoneShopItems,
             Competitive.CompetitiveDatabase.EvoItemShopItems,
             Competitive.CompetitiveDatabase.MegaStoneShopXYORAS,
-            Competitive.CompetitiveDatabase.MegaStoneShopSM
+            Competitive.CompetitiveDatabase.MegaStoneShopZA
         })
             if (category != null)
                 foreach (string name in category) allowedNames.Add(name);
