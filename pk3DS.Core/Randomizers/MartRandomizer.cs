@@ -171,16 +171,66 @@ public class MartRandomizer
 
     private ZCrystalFilter ZFilter = new(null);
 
-    private int RandomItemId(int maxItemID)
+    private static int RandomItemId(int[] allowedPool)
     {
-        int item;
-        int guard = 0;
-        do
+        if (allowedPool == null || allowedPool.Length == 0) return 1;
+        return allowedPool[Util.Rand.Next(allowedPool.Length)];
+    }
+
+    private static string[] BuildMainShopInventory()
+    {
+        string[] guaranteed =
+        [
+            "Poké Ball", "Great Ball", "Ultra Ball",
+            "Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore",
+            "Revive", "Max Revive", "Antidote", "Paralyze Heal", "Burn Heal",
+            "Ice Heal", "Awakening", "Full Heal"
+        ];
+        return guaranteed.Concat(Competitive.CompetitiveDatabase.MainShopItems)
+            .Distinct(Competitive.GameNameComparer.Instance).ToArray();
+    }
+
+    private static int[] BuildRandomShopPool(string[] itemNames, int maxItemID)
+    {
+        if (itemNames == null || itemNames.Length == 0) return [];
+        var allowed = new HashSet<string>(Competitive.GameNameComparer.Instance);
+        string[] basics =
+        [
+            "Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore",
+            "Revive", "Max Revive", "Antidote", "Paralyze Heal", "Burn Heal", "Ice Heal",
+            "Awakening", "Full Heal", "Ether", "Max Ether", "Elixir", "Max Elixir",
+            "Repel", "Super Repel", "Max Repel", "Escape Rope", "Rare Candy",
+            "Poké Ball", "Great Ball", "Ultra Ball", "Premier Ball", "Heal Ball", "Net Ball",
+            "Nest Ball", "Dive Ball", "Dusk Ball", "Timer Ball", "Quick Ball", "Repeat Ball",
+            "Luxury Ball", "Beast Ball", "Ability Capsule", "Bottle Cap", "Gold Bottle Cap",
+            "Adrenaline Orb"
+        ];
+        foreach (string name in basics) allowed.Add(name);
+        foreach (string[] category in new[]
         {
-            item = (int)(Util.Random32() % (uint)(maxItemID > 0 ? maxItemID : 800)) + 1;
-        } while (guard++ < 256 &&
-                 ((BanBadItems && Array.IndexOf(BannedItems, item) >= 0) || ZFilter.IsZCrystal(item)));
-        return item;
+            Competitive.CompetitiveDatabase.MainShopItems,
+            Competitive.CompetitiveDatabase.CompetitiveShopItems,
+            Competitive.CompetitiveDatabase.BerryShopItems,
+            Competitive.CompetitiveDatabase.TypeBoostShopItems,
+            Competitive.CompetitiveDatabase.PlateShopItems,
+            Competitive.CompetitiveDatabase.EvoStoneShopItems,
+            Competitive.CompetitiveDatabase.EvoItemShopItems,
+            Competitive.CompetitiveDatabase.MegaStoneShopXYORAS,
+            Competitive.CompetitiveDatabase.MegaStoneShopZA
+        })
+            if (category != null)
+                foreach (string name in category) allowed.Add(name);
+
+        var ids = new List<int>();
+        for (int id = 1; id < itemNames.Length && id <= maxItemID; id++)
+        {
+            string name = itemNames[id]?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || name is "???" or "-----") continue;
+            if (name.StartsWith("TM", StringComparison.OrdinalIgnoreCase) && name.Length > 2 && char.IsDigit(name[2])) continue;
+            if (ZCrystalFilter.IsZCrystalName(name) || Legal.Pouch_Key_SM.Contains((ushort)id)) continue;
+            if (allowed.Contains(name)) ids.Add(id);
+        }
+        return ids.ToArray();
     }
 
     public void Execute(int maxItemID)
@@ -207,7 +257,7 @@ public class MartRandomizer
             {
                 for (int i = 0; i < count; i++)
                 {
-                    int item = RandomItemId(maxItemID);
+                    int item = RandomItemId(randomShopPool);
                     Array.Copy(BitConverter.GetBytes((ushort)item), 0, data, currentOfs + (2 * i), 2);
                 }
             }
@@ -272,13 +322,18 @@ public class MartRandomizer
 
         string[] tmPool = BuildTMPool(itemNames);
         string[] mintPool = BuildMintPool(itemNames);
+        int[] randomShopPool = BuildRandomShopPool(itemNames, maxItemID);
+        string[] mainShopPool = Present(BuildMainShopInventory());
         int tmCursor = 0;
 
         var regular = new int[layout.ShopOffsets.Length][];
         for (int i = 0; i < regular.Length; i++)
         {
             string where = i < locations.Length ? locations[i] : "";
-            var cat = Present(ResolveRegularCategory(i, tmPool, mintPool, RandomizeAllShops, out bool flat));
+            bool flat = false;
+            string[] cat = i < TrialStages
+                ? mainShopPool
+                : Present(ResolveRegularCategory(i, tmPool, mintPool, RandomizeAllShops, out flat));
             int have = layout.ShopCounts[i];
 
             // Each TM shop draws its own slice of the shuffled pool, so two of them never stock
@@ -358,7 +413,7 @@ public class MartRandomizer
     private static string[] ResolveRegularCategory(int entry, string[] tmPool, string[] mintPool, bool randomizeAllShops, out bool flatRandom)
     {
         flatRandom = false;
-        if (entry < TrialStages) return null; // preserve the main Poké Mart across all trial stages
+        if (entry < TrialStages) return BuildMainShopInventory();
         string locationName = entry < locations.Length ? locations[entry] : "";
 
         // Fixed-purpose shops keep their purpose.
