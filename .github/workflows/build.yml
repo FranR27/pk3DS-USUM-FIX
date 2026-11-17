@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/field-items-and-secondary-shops
+      - fix/move-randomizer-valid-data
   pull_request:
     branches:
       - fix/field-items-and-secondary-shops

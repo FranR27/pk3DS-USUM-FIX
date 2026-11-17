@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -71,12 +72,41 @@ public class SpeciesRandomizer
 
     private int GetEvolutionSpeciesOrRandom(int parentMapped, int originalChild, Structures.EvolutionSet[] evos)
     {
-        if (parentMapped < evos.Length)
+        if (parentMapped > 0 && parentMapped < evos.Length)
         {
-            var parentEvoList = evos[parentMapped];
-            var evo = parentEvoList.PossibleEvolutions.FirstOrDefault(e => e.Species != 0);
-            if (evo != null)
-                return evo.Species;
+            var candidates = evos[parentMapped]?.PossibleEvolutions?
+                .Where(e => e != null && e.Species > 0 && e.Species <= MaxSpeciesID &&
+                            e.Species < SpeciesStat.Length && SpeciesStat[e.Species] != null)
+                .Select(e => e.Species)
+                .Distinct()
+                .ToList();
+
+            if (candidates is { Count: > 0 })
+            {
+                // Keep the replacement evolution family, but do not blindly take its first branch:
+                // that can turn a low-BST original evolution into a pseudo-legendary (or vice versa).
+                if (rBST && originalChild > 0 && originalChild < SpeciesStat.Length && SpeciesStat[originalChild] != null)
+                {
+                    int targetBST = SpeciesStat[originalChild].BST;
+                    var eligible = candidates;
+                    if (rEXP)
+                    {
+                        var sameGrowth = eligible.Where(s => SpeciesStat[s].EXPGrowth == SpeciesStat[originalChild].EXPGrowth).ToList();
+                        if (sameGrowth.Count > 0) eligible = sameGrowth;
+                    }
+                    if (rType)
+                    {
+                        var sameType = eligible.Where(s => SpeciesStat[s].Types.Any(t => SpeciesStat[originalChild].Types.Contains(t))).ToList();
+                        if (sameType.Count > 0) eligible = sameType;
+                    }
+
+                    int bestDistance = eligible.Min(s => Math.Abs(SpeciesStat[s].BST - targetBST));
+                    var best = eligible.Where(s => Math.Abs(SpeciesStat[s].BST - targetBST) == bestDistance).ToList();
+                    return best[Util.Rand.Next(best.Count)];
+                }
+
+                return candidates[Util.Rand.Next(candidates.Count)];
+            }
         }
         return GetRandomSpecies(originalChild);
     }
@@ -190,11 +220,9 @@ public class SpeciesRandomizer
         if (!rBST)
             return false;
         // Base stat total has to be close to original BST
-        int expand = loopctr / MaxSpeciesID;
-        if ((L || E) && loopctr > 10)
-        {
-            expand += (loopctr / 5) + 10;
-        }
+        // Legendary/mythical inclusion must not disable the BST constraint.
+        // Widen the accepted range gradually only after a full pass through the species pool.
+        int expand = Math.Min(8, loopctr / Math.Max(1, MaxSpeciesID));
         int lo = oldpkm.BST * l / (h + expand);
         int hi = oldpkm.BST * (h + expand) / l;
         return lo > pkm.BST || pkm.BST > hi;

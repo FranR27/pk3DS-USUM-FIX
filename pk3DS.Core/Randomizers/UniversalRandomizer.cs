@@ -1178,7 +1178,7 @@ public class UniversalRandomizer
                     progressCallback?.Invoke("WARNING: " + MartRandomizer.ExpansionSkipped, 95);
             }
             else
-                martRand.Execute(Config.Info.MaxItemID);
+                martRand.Execute(Config.Info.MaxItemID, Config);
         }
 
         // 9a1. Cheap Rare Candies
@@ -1503,6 +1503,14 @@ public class UniversalRandomizer
     private int PickTrainerSpecies(SpeciesRandomizer speciesRand, int original, int theme,
                                    bool isLegendarySlot = false, List<int> allowedLegendaries = null)
     {
+        if (Settings.CompetitiveRandomizer && Settings.TrainerTrySimilarStrength)
+        {
+            IEnumerable<int> candidates = isLegendarySlot && allowedLegendaries is { Count: > 0 }
+                ? allowedLegendaries
+                : speciesRand.AllowedSpecies;
+            return PickFinalEvolutionBySimilarBST(original, candidates, theme);
+        }
+
         if (isLegendarySlot && allowedLegendaries != null && allowedLegendaries.Count > 0)
         {
             if (theme >= 0)
@@ -1525,6 +1533,30 @@ public class UniversalRandomizer
         };
     }
 
+    private int PickFinalEvolutionBySimilarBST(int original, IEnumerable<int> candidates, int requiredType = -1)
+    {
+        int reference = GetFinalEvolution(original);
+        int targetBST = Config.Personal[reference]?.BST ?? 0;
+        var finalCandidates = candidates
+            .Where(s => s > 0 && s <= Config.MaxSpeciesID)
+            .Select(GetFinalEvolution)
+            .Where(s => s > 0 && s <= Config.MaxSpeciesID &&
+                        (requiredType < 0 || Config.Personal[s]?.Types?.Contains(requiredType) == true))
+            .Distinct()
+            .ToList();
+
+        if (finalCandidates.Count == 0)
+            return GetFinalEvolution(original);
+
+        // Competitive mode forces final evolutions, so compare final-form BST to the original
+        // Pokemon's final-form BST instead of comparing a base form to a fully evolved result.
+        int minDistance = finalCandidates.Min(s => Math.Abs((Config.Personal[s]?.BST ?? 0) - targetBST));
+        var closest = finalCandidates
+            .Where(s => Math.Abs((Config.Personal[s]?.BST ?? 0) - targetBST) == minDistance)
+            .ToList();
+        return closest[Util.Rand.Next(closest.Count)];
+    }
+
     private int RefineTrainerPick(SpeciesRandomizer speciesRand, int original, int chosen,
                                   HashSet<int> placed, HashSet<int> teamTypes, bool diverse, int theme = -1,
                                   bool isLegendarySlot = false, List<int> allowedLegendaries = null)
@@ -1535,6 +1567,14 @@ public class UniversalRandomizer
 
         int Reroll()
         {
+            if (Settings.CompetitiveRandomizer && Settings.TrainerTrySimilarStrength)
+            {
+                IEnumerable<int> candidates = isLegendarySlot && allowedLegendaries is { Count: > 0 }
+                    ? allowedLegendaries
+                    : speciesRand.AllowedSpecies;
+                return PickFinalEvolutionBySimilarBST(original, candidates, theme);
+            }
+
             if (isLegendarySlot && allowedLegendaries != null && allowedLegendaries.Count > 0)
             {
                 if (theme >= 0)
@@ -1928,8 +1968,13 @@ public class UniversalRandomizer
                 maxItem = Math.Min(maxItem, itemNames.Length - 1);
             var zFilter = new ZCrystalFilter(itemNames);
 
-            // Collect all existing field items if in shuffle mode
-            var collectedItems = new List<uint>();
+            // Preserve the original reward class: yellow TM balls may only exchange with other TMs.
+            var collectedGeneralItems = new List<uint>();
+            var collectedTMItems = new List<uint>();
+            int[] tmPool = (itemNames ?? []).Select((name, id) => (name, id))
+                .Where(x => x.id > 0 && x.id <= maxItem && IsTMItemName(x.name))
+                .Select(x => x.id).ToArray();
+            int[] generalPool = BuildAllowedFieldItemPool(itemNames, maxItem);
             int worldCount = ed.FileCount / 11;
 
             if (Settings.FieldItemsMode == 1) // Shuffle
@@ -1954,14 +1999,18 @@ public class UniversalRandomizer
                         {
                             int dataId = 4 + i * 64 + 48;
                             uint it = BitConverter.ToUInt32(itemData, dataId);
-                            if (it > 0) collectedItems.Add(it);
+                            if (it == 0) continue;
+                            bool isTM = IsTMItemId((int)it, itemNames);
+                            (isTM ? collectedTMItems : collectedGeneralItems).Add(it);
                         }
                     }
                 }
-                collectedItems = collectedItems.OrderBy(_ => Util.Rand.Next()).ToList();
+                collectedGeneralItems = collectedGeneralItems.OrderBy(_ => Util.Rand.Next()).ToList();
+                collectedTMItems = collectedTMItems.OrderBy(_ => Util.Rand.Next()).ToList();
             }
 
-            int shuffleIdx = 0;
+            int shuffleGeneralIdx = 0;
+            int shuffleTMIdx = 0;
             for (int w = 0; w < worldCount; w++)
             {
                 int index = w * 11;
@@ -1986,15 +2035,24 @@ public class UniversalRandomizer
                         if (currentItem == 0) continue;
 
                         uint newItem = currentItem;
-                        if (Settings.FieldItemsMode == 1) // Shuffle
+                        bool isTMReward = IsTMItemId((int)currentItem, itemNames);
+                        if (isTMReward)
                         {
-                            if (shuffleIdx < collectedItems.Count)
-                                newItem = collectedItems[shuffleIdx++];
+                            if (Settings.FieldItemsMode == 1)
+                            {
+                                if (shuffleTMIdx < collectedTMItems.Count)
+                                    newItem = collectedTMItems[shuffleTMIdx++];
+                            }
+                            else if (tmPool.Length > 0)
+                                newItem = (uint)tmPool[Util.Rand.Next(tmPool.Length)];
                         }
-                        else // Random
+                        else if (Settings.FieldItemsMode == 1)
                         {
-                            newItem = (uint)GetRandomFieldItem(maxItem, zFilter, itemNames);
+                            if (shuffleGeneralIdx < collectedGeneralItems.Count)
+                                newItem = collectedGeneralItems[shuffleGeneralIdx++];
                         }
+                        else if (generalPool.Length > 0)
+                            newItem = (uint)generalPool[Util.Rand.Next(generalPool.Length)];
 
                         BitConverter.GetBytes(newItem).CopyTo(itemData, dataId);
                         modified = true;
@@ -2016,25 +2074,60 @@ public class UniversalRandomizer
         }
     }
 
-    private int GetRandomFieldItem(int maxItem, ZCrystalFilter zFilter, string[] itemNames)
+    private static bool IsTMItemName(string name)
     {
-        for (int tries = 0; tries < 200; tries++)
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        string value = name.Trim();
+        return value.Length >= 3 &&
+            (value.StartsWith("TM", StringComparison.OrdinalIgnoreCase) ||
+             value.StartsWith("MT", StringComparison.OrdinalIgnoreCase)) &&
+            char.IsDigit(value[2]);
+    }
+
+    private static bool IsTMItemId(int id, string[] itemNames) =>
+        id > 0 && itemNames != null && id < itemNames.Length && IsTMItemName(itemNames[id]);
+
+    private static int[] BuildAllowedFieldItemPool(string[] itemNames, int maxItem)
+    {
+        if (itemNames == null || itemNames.Length == 0) return [];
+        var allowedNames = new HashSet<string>(Competitive.GameNameComparer.Instance);
+        string[] curated =
+        [
+            "Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore",
+            "Revive", "Max Revive", "Antidote", "Paralyze Heal", "Burn Heal", "Ice Heal",
+            "Awakening", "Full Heal", "Ether", "Max Ether", "Elixir", "Max Elixir",
+            "Max Repel", "Super Repel", "Repel", "Escape Rope", "Rare Candy",
+            "Poké Ball", "Great Ball", "Ultra Ball", "Premier Ball", "Heal Ball", "Net Ball",
+            "Nest Ball", "Dive Ball", "Dusk Ball", "Timer Ball", "Quick Ball", "Repeat Ball",
+            "Luxury Ball", "Beast Ball", "Ability Capsule", "Bottle Cap", "Gold Bottle Cap",
+            "Adrenaline Orb"
+        ];
+        foreach (string name in curated) allowedNames.Add(name);
+        foreach (string[] category in new[]
         {
-            int item = Util.Rand.Next(1, maxItem + 1);
-            if (zFilter != null && zFilter.IsZCrystal(item)) continue;
-            if (Legal.Pouch_Key_SM.Contains((ushort)item)) continue;
-            if (Settings.FieldItemsBanBadItems)
-            {
-                if (Array.IndexOf(PickupBannedItems, item) >= 0) continue;
-            }
-            if (itemNames != null && item < itemNames.Length)
-            {
-                string nm = itemNames[item]?.Trim();
-                if (string.IsNullOrEmpty(nm) || nm is "???" or "-----") continue;
-            }
-            return item;
+            Competitive.CompetitiveDatabase.MainShopItems,
+            Competitive.CompetitiveDatabase.CompetitiveShopItems,
+            Competitive.CompetitiveDatabase.BerryShopItems,
+            Competitive.CompetitiveDatabase.TypeBoostShopItems,
+            Competitive.CompetitiveDatabase.PlateShopItems,
+            Competitive.CompetitiveDatabase.EvoStoneShopItems,
+            Competitive.CompetitiveDatabase.EvoItemShopItems,
+            Competitive.CompetitiveDatabase.MegaStoneShopXYORAS,
+            Competitive.CompetitiveDatabase.MegaStoneShopZA
+        })
+            if (category != null)
+                foreach (string name in category) allowedNames.Add(name);
+
+        var result = new List<int>();
+        for (int id = 1; id < itemNames.Length && id <= maxItem; id++)
+        {
+            string name = itemNames[id]?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || name is "???" or "-----" || IsTMItemName(name))
+                continue;
+            if (Legal.Pouch_Key_SM.Contains((ushort)id)) continue;
+            if (allowedNames.Contains(name)) result.Add(id);
         }
-        return 1; // Master Ball fallback
+        return result.ToArray();
     }
 
     private static void ApplyFullTutorCompatibility(PersonalInfo[] table)
@@ -2471,26 +2564,33 @@ public class UniversalRandomizer
             return tmlist;
 
         // The pool the TM slots are drawn from. Expansion's new slots draw from the same pool.
+        // Keep this validation in the method scope because both randomized and unchanged
+        // TM modes can expand the table and therefore need the same loaded move-data ceiling.
+        var tmMoveNames = Config.GetText(TextName.MoveNames);
+        int tmMaxMoveID = Math.Min(Config.Info.MaxMoveID, (Config.Moves?.Length ?? 1) - 1);
+        bool IsValidLoadedMove(int id) =>
+            id > 0 && id <= tmMaxMoveID &&
+            Config.Moves[id] != null &&
+            Config.Moves[id].PP != 1 &&
+            Legal.IsUsableMove(id, tmMoveNames);
+
         List<int> pool;
         if (Settings.TMHMMovesMode > 0)
         {
-            var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
-
             List<int> validMoves;
             if (Settings.CompetitiveRandomizer)
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) &&
-                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(moveNames[m]) ||
-                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(moveNames[m])))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m) &&
+                                (Competitive.CompetitiveDatabase.CompetitiveMoves.Contains(tmMoveNames[m]) ||
+                                 Competitive.CompetitiveDatabase.SituationalMoves.Contains(tmMoveNames[m])))
                     .Distinct()
                     .ToList();
             }
             else
             {
-                validMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames))
+                validMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m))
                     .Distinct()
                     .ToList();
 
@@ -2503,8 +2603,8 @@ public class UniversalRandomizer
 
             if (validMoves.Count < t.Count)
             {
-                var fallbackMoves = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                    .Where(m => Legal.IsUsableMove(m, moveNames) && !validMoves.Contains(m))
+                var fallbackMoves = Enumerable.Range(1, tmMaxMoveID)
+                    .Where(m => IsValidLoadedMove(m) && !validMoves.Contains(m))
                     .Distinct()
                     .ToList();
                 Util.Shuffle(fallbackMoves);
@@ -2528,10 +2628,8 @@ public class UniversalRandomizer
         {
             // Mode 0 is "Unchanged": the vanilla 100 stay put (shuffling them used to re-point every
             // species' TM compatibility bits at different moves); only the new slots are filled.
-            var moveNames = Config.GetText(TextName.MoveNames);
-            int maxMoveID = Config.Info.MaxMoveID;
-            pool = Enumerable.Range(1, Math.Min(maxMoveID, moveNames.Length - 1))
-                .Where(m => Legal.IsUsableMove(m, moveNames))
+            pool = Enumerable.Range(1, tmMaxMoveID)
+                .Where(m => IsValidLoadedMove(m))
                 .Distinct()
                 .ToList();
         }
