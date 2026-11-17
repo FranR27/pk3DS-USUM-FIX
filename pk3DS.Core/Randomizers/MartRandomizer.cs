@@ -233,9 +233,12 @@ public class MartRandomizer
         return ids.ToArray();
     }
 
-    public void Execute(int maxItemID)
+    public void Execute(int maxItemID, GameConfig config)
     {
         if (Mode == 0) return;
+        string[] itemNames = config?.GetText(TextName.ItemNames) ?? [];
+        ZFilter = new ZCrystalFilter(itemNames);
+        int[] randomShopPool = BuildRandomShopPool(itemNames, maxItemID);
         string croPath = Path.Combine(RomFSPath, "Shop.cro");
         if (!File.Exists(croPath)) return;
         if (pk3DS.Core.Modding.UhuruGuard.RefusalFor(croPath) != null) return; // Uhuru: Shop.cro is not patched unchecked
