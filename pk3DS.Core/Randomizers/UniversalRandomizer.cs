@@ -1503,6 +1503,14 @@ public class UniversalRandomizer
     private int PickTrainerSpecies(SpeciesRandomizer speciesRand, int original, int theme,
                                    bool isLegendarySlot = false, List<int> allowedLegendaries = null)
     {
+        if (Settings.CompetitiveRandomizer && Settings.TrainerTrySimilarStrength)
+        {
+            IEnumerable<int> candidates = isLegendarySlot && allowedLegendaries is { Count: > 0 }
+                ? allowedLegendaries
+                : speciesRand.AllowedSpecies;
+            return PickFinalEvolutionBySimilarBST(original, candidates, theme);
+        }
+
         if (isLegendarySlot && allowedLegendaries != null && allowedLegendaries.Count > 0)
         {
             if (theme >= 0)
@@ -1523,6 +1531,30 @@ public class UniversalRandomizer
             TrainerThemes.RandomEvenDistribution => speciesRand.GetEvenDistributionSpecies(),
             _ => speciesRand.GetMappedSpecies(original),
         };
+    }
+
+    private int PickFinalEvolutionBySimilarBST(int original, IEnumerable<int> candidates, int requiredType = -1)
+    {
+        int reference = GetFinalEvolution(original);
+        int targetBST = Config.Personal[reference]?.BST ?? 0;
+        var finalCandidates = candidates
+            .Where(s => s > 0 && s <= Config.MaxSpeciesID)
+            .Select(GetFinalEvolution)
+            .Where(s => s > 0 && s <= Config.MaxSpeciesID &&
+                        (requiredType < 0 || Config.Personal[s]?.Types?.Contains(requiredType) == true))
+            .Distinct()
+            .ToList();
+
+        if (finalCandidates.Count == 0)
+            return GetFinalEvolution(original);
+
+        // Competitive mode forces final evolutions, so compare final-form BST to the original
+        // Pokemon's final-form BST instead of comparing a base form to a fully evolved result.
+        int minDistance = finalCandidates.Min(s => Math.Abs((Config.Personal[s]?.BST ?? 0) - targetBST));
+        var closest = finalCandidates
+            .Where(s => Math.Abs((Config.Personal[s]?.BST ?? 0) - targetBST) == minDistance)
+            .ToList();
+        return closest[Util.Rand.Next(closest.Count)];
     }
 
     private int RefineTrainerPick(SpeciesRandomizer speciesRand, int original, int chosen,
@@ -2038,8 +2070,10 @@ public class UniversalRandomizer
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
         string value = name.Trim();
-        return value.Length >= 3 && value.StartsWith("TM", StringComparison.OrdinalIgnoreCase)
-            && char.IsDigit(value[2]);
+        return value.Length >= 3 &&
+            (value.StartsWith("TM", StringComparison.OrdinalIgnoreCase) ||
+             value.StartsWith("MT", StringComparison.OrdinalIgnoreCase)) &&
+            char.IsDigit(value[2]);
     }
 
     private static bool IsTMItemId(int id, string[] itemNames) =>
