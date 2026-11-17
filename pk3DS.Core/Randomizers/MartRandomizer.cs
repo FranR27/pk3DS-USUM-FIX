@@ -226,7 +226,7 @@ public class MartRandomizer
         {
             string name = itemNames[id]?.Trim();
             if (string.IsNullOrWhiteSpace(name) || name is "???" or "-----") continue;
-            if (name.StartsWith("TM", StringComparison.OrdinalIgnoreCase) && name.Length > 2 && char.IsDigit(name[2])) continue;
+            if (IsTMItemName(name)) continue;
             if (ZCrystalFilter.IsZCrystalName(name) || Legal.Pouch_Key_SM.Contains((ushort)id)) continue;
             if (allowed.Contains(name)) ids.Add(id);
         }
@@ -563,6 +563,14 @@ public class MartRandomizer
         return mints.ToArray();
     }
 
+    private static bool IsTMItemName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length < 3) return false;
+        return (name.StartsWith("TM", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("MT", StringComparison.OrdinalIgnoreCase)) &&
+               char.IsDigit(name[2]);
+    }
+
     private static string[] BuildTMPool(string[] itemNames)
     {
         var tmNames = new List<string>();
@@ -570,8 +578,7 @@ public class MartRandomizer
         {
             foreach (string nm in itemNames)
             {
-                if (string.IsNullOrEmpty(nm) || nm.Length < 3) continue;
-                if (nm.StartsWith("TM", StringComparison.OrdinalIgnoreCase) && char.IsDigit(nm[2]))
+                if (IsTMItemName(nm))
                     tmNames.Add(nm);
             }
         }
