@@ -364,7 +364,7 @@ public class MartRandomizer
                 list[k] = where.Contains("[X Items]")
                     ? XItemIDs[k % XItemIDs.Length]
                     : flat || cat.Length == 0
-                        ? RandomItemId(maxItemID)
+                        ? RandomItemId(randomShopPool)
                         : GetItemByName(cat[k % cat.Length]);
             }
             regular[i] = list;
@@ -386,7 +386,7 @@ public class MartRandomizer
 
             var list = new int[size];
             for (int k = 0; k < size; k++)
-                list[k] = flat || cat.Length == 0 ? RandomItemId(maxItemID) : GetItemByName(cat[k % cat.Length]);
+                list[k] = flat || cat.Length == 0 ? RandomItemId(randomShopPool) : GetItemByName(cat[k % cat.Length]);
             bp[i] = list;
         }
 
