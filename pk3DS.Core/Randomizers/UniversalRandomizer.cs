@@ -1178,7 +1178,7 @@ public class UniversalRandomizer
                     progressCallback?.Invoke("WARNING: " + MartRandomizer.ExpansionSkipped, 95);
             }
             else
-                martRand.Execute(Config.Info.MaxItemID);
+                martRand.Execute(Config.Info.MaxItemID, Config);
         }
 
         // 9a1. Cheap Rare Candies
