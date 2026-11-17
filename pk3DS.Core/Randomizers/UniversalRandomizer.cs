@@ -1928,8 +1928,15 @@ public class UniversalRandomizer
                 maxItem = Math.Min(maxItem, itemNames.Length - 1);
             var zFilter = new ZCrystalFilter(itemNames);
 
-            // Collect all existing field items if in shuffle mode
-            var collectedItems = new List<uint>();
+            // Preserve the original reward class: yellow TM balls may only exchange with other TMs.
+            var collectedGeneralItems = new List<uint>();
+            var collectedTMItems = new List<uint>();
+            string[] tmNames = (itemNames ?? []).Select((name, id) => (name, id))
+                .Where(x => IsTMItemName(x.name)).Select(x => x.name).ToArray();
+            int[] tmPool = (itemNames ?? []).Select((name, id) => (name, id))
+                .Where(x => x.id > 0 && x.id <= maxItem && IsTMItemName(x.name))
+                .Select(x => x.id).ToArray();
+            int[] generalPool = BuildAllowedFieldItemPool(itemNames, maxItem);
             int worldCount = ed.FileCount / 11;
 
             if (Settings.FieldItemsMode == 1) // Shuffle
@@ -1954,14 +1961,18 @@ public class UniversalRandomizer
                         {
                             int dataId = 4 + i * 64 + 48;
                             uint it = BitConverter.ToUInt32(itemData, dataId);
-                            if (it > 0) collectedItems.Add(it);
+                            if (it == 0) continue;
+                            bool isTM = IsTMItemId((int)it, itemNames);
+                            (isTM ? collectedTMItems : collectedGeneralItems).Add(it);
                         }
                     }
                 }
-                collectedItems = collectedItems.OrderBy(_ => Util.Rand.Next()).ToList();
+                Util.Shuffle(collectedGeneralItems);
+                Util.Shuffle(collectedTMItems);
             }
 
-            int shuffleIdx = 0;
+            int shuffleGeneralIdx = 0;
+            int shuffleTMIdx = 0;
             for (int w = 0; w < worldCount; w++)
             {
                 int index = w * 11;
@@ -1986,15 +1997,24 @@ public class UniversalRandomizer
                         if (currentItem == 0) continue;
 
                         uint newItem = currentItem;
-                        if (Settings.FieldItemsMode == 1) // Shuffle
+                        bool isTMReward = IsTMItemId((int)currentItem, itemNames);
+                        if (isTMReward)
                         {
-                            if (shuffleIdx < collectedItems.Count)
-                                newItem = collectedItems[shuffleIdx++];
+                            if (Settings.FieldItemsMode == 1)
+                            {
+                                if (shuffleTMIdx < collectedTMItems.Count)
+                                    newItem = collectedTMItems[shuffleTMIdx++];
+                            }
+                            else if (tmPool.Length > 0)
+                                newItem = (uint)tmPool[Util.Rand.Next(tmPool.Length)];
                         }
-                        else // Random
+                        else if (Settings.FieldItemsMode == 1)
                         {
-                            newItem = (uint)GetRandomFieldItem(maxItem, zFilter, itemNames);
+                            if (shuffleGeneralIdx < collectedGeneralItems.Count)
+                                newItem = collectedGeneralItems[shuffleGeneralIdx++];
                         }
+                        else if (generalPool.Length > 0)
+                            newItem = (uint)generalPool[Util.Rand.Next(generalPool.Length)];
 
                         BitConverter.GetBytes(newItem).CopyTo(itemData, dataId);
                         modified = true;
@@ -2016,25 +2036,58 @@ public class UniversalRandomizer
         }
     }
 
-    private int GetRandomFieldItem(int maxItem, ZCrystalFilter zFilter, string[] itemNames)
+    private static bool IsTMItemName(string name)
     {
-        for (int tries = 0; tries < 200; tries++)
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        string value = name.Trim();
+        return value.Length >= 3 && value.StartsWith("TM", StringComparison.OrdinalIgnoreCase)
+            && char.IsDigit(value[2]);
+    }
+
+    private static bool IsTMItemId(int id, string[] itemNames) =>
+        id > 0 && itemNames != null && id < itemNames.Length && IsTMItemName(itemNames[id]);
+
+    private static int[] BuildAllowedFieldItemPool(string[] itemNames, int maxItem)
+    {
+        if (itemNames == null || itemNames.Length == 0) return [];
+        var allowedNames = new HashSet<string>(Competitive.GameNameComparer.Instance);
+        string[] curated =
+        [
+            "Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore",
+            "Revive", "Max Revive", "Antidote", "Paralyze Heal", "Burn Heal", "Ice Heal",
+            "Awakening", "Full Heal", "Ether", "Max Ether", "Elixir", "Max Elixir",
+            "Max Repel", "Super Repel", "Repel", "Escape Rope", "Rare Candy",
+            "Poké Ball", "Great Ball", "Ultra Ball", "Premier Ball", "Heal Ball", "Net Ball",
+            "Nest Ball", "Dive Ball", "Dusk Ball", "Timer Ball", "Quick Ball", "Repeat Ball",
+            "Luxury Ball", "Beast Ball", "Ability Capsule", "Bottle Cap", "Gold Bottle Cap",
+            "Adrenaline Orb"
+        ];
+        foreach (string name in curated) allowedNames.Add(name);
+        foreach (string[] category in new[]
         {
-            int item = Util.Rand.Next(1, maxItem + 1);
-            if (zFilter != null && zFilter.IsZCrystal(item)) continue;
-            if (Legal.Pouch_Key_SM.Contains((ushort)item)) continue;
-            if (Settings.FieldItemsBanBadItems)
-            {
-                if (Array.IndexOf(PickupBannedItems, item) >= 0) continue;
-            }
-            if (itemNames != null && item < itemNames.Length)
-            {
-                string nm = itemNames[item]?.Trim();
-                if (string.IsNullOrEmpty(nm) || nm is "???" or "-----") continue;
-            }
-            return item;
+            Competitive.CompetitiveDatabase.MainShopItems,
+            Competitive.CompetitiveDatabase.CompetitiveShopItems,
+            Competitive.CompetitiveDatabase.BerryShopItems,
+            Competitive.CompetitiveDatabase.TypeBoostShopItems,
+            Competitive.CompetitiveDatabase.PlateShopItems,
+            Competitive.CompetitiveDatabase.EvoStoneShopItems,
+            Competitive.CompetitiveDatabase.EvoItemShopItems,
+            Competitive.CompetitiveDatabase.MegaStoneShopXYORAS,
+            Competitive.CompetitiveDatabase.MegaStoneShopSM
+        })
+            if (category != null)
+                foreach (string name in category) allowedNames.Add(name);
+
+        var result = new List<int>();
+        for (int id = 1; id < itemNames.Length && id <= maxItem; id++)
+        {
+            string name = itemNames[id]?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || name is "???" or "-----" || IsTMItemName(name))
+                continue;
+            if (Legal.Pouch_Key_SM.Contains((ushort)id)) continue;
+            if (allowedNames.Contains(name)) result.Add(id);
         }
-        return 1; // Master Ball fallback
+        return result.ToArray();
     }
 
     private static void ApplyFullTutorCompatibility(PersonalInfo[] table)
