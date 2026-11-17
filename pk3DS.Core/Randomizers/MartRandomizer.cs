@@ -361,11 +361,11 @@ public class MartRandomizer
             var list = new int[size];
             for (int k = 0; k < size; k++)
             {
-                list[k] = where.Contains("[X Items]")
-                    ? XItemIDs[k % XItemIDs.Length]
-                    : flat || cat.Length == 0
-                        ? RandomItemId(randomShopPool)
-                        : GetItemByName(cat[k % cat.Length]);
+                // X-item locations are secondary shops too: do not force the vanilla X-item list.
+                // They draw from the same validated pool as other randomized secondary shops.
+                list[k] = flat || cat.Length == 0
+                    ? RandomItemId(randomShopPool)
+                    : GetItemByName(cat[k % cat.Length]);
             }
             regular[i] = list;
         }
